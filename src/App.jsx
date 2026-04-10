@@ -45,9 +45,14 @@ export default function App() {
 
       {/* Topbar */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'18px 18px 0', maxWidth:1240, margin:'0 auto' }}>
-        <span style={{ fontSize:'0.65rem', textTransform:'uppercase', letterSpacing:'0.12em', color:'var(--muted)', fontWeight:600 }}>
-          ✦ Tyler Cox-Druin
-        </span>
+        <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+          <span style={{ fontSize:'0.65rem', textTransform:'uppercase', letterSpacing:'0.12em', color:'var(--muted)', fontWeight:600 }}>
+            ✦ Tyler Cox-Druin
+          </span>
+          <span style={{ fontSize:'0.65rem', color:'var(--accent)', fontWeight:600, letterSpacing:'0.02em' }}>
+            @tylercoxdruin
+          </span>
+        </div>
         <div style={{ display:'flex', gap:8 }}>
           {edit && (
             <button onClick={() => { setLayouts(DEFAULT_LAYOUTS); try { localStorage.removeItem(KEY) } catch {} }} style={btnStyle('#ef4444', 0.08)}>

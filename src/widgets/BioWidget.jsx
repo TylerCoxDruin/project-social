@@ -20,17 +20,6 @@ export default function BioWidget() {
 
   return (
     <div style={{ padding:'20px', height:'100%', display:'flex', flexDirection:'column', gap:12, overflow:'auto' }}>
-      <div>
-        <div style={{ fontSize:'1.05rem', fontWeight:700, letterSpacing:'-0.02em',
-          background:'linear-gradient(to right,#fff,#94a3b8)',
-          WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
-          Tyler Cox-Druin
-        </div>
-        <div style={{ fontSize:'0.75rem', color:'var(--accent)', fontWeight:600, marginTop:2 }}>
-          @tylercoxdruin
-        </div>
-      </div>
-
       <p style={{ fontSize:'0.8rem', lineHeight:1.65, color:'#d4d4d8', flex:1 }}>
         Building things at the intersection of design and engineering.
         Into local LLMs, automation, 3D printing, and making the web feel alive. 🌐
