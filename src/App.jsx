@@ -46,7 +46,7 @@ export default function App() {
       {/* Topbar */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'18px 18px 0', maxWidth:1240, margin:'0 auto' }}>
         <span style={{ fontSize:'0.65rem', textTransform:'uppercase', letterSpacing:'0.12em', color:'var(--muted)', fontWeight:600 }}>
-          ✦ Profile
+          ✦ Tyler Cox-Druin
         </span>
         <div style={{ display:'flex', gap:8 }}>
           {edit && (
