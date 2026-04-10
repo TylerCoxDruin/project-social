@@ -91,7 +91,7 @@ export default function App() {
           <div key="friends"><Card edit={edit} label="Friends"><FriendsWidget /></Card></div>
           <div key="youtube"><Card edit={edit} label="YouTube"><YouTubeWidget /></Card></div>
           <div key="gallery"><Card edit={edit} label="Gallery"><GalleryWidget /></Card></div>
-          <div key="music"><Card edit={edit} label="Music"><MusicWidget /></Card></div>
+          <div key="music"><Card edit={edit} label="Music"><MusicWidget editMode={edit} /></Card></div>
         </ResponsiveGridLayout>
       </div>
     </div>
