@@ -14,9 +14,9 @@ const FRIENDS = [
 export default function FriendsWidget() {
   const [hov, setHov] = useState(null)
   return (
-    <div style={{ padding:'16px', height:'100%', display:'flex', flexDirection:'column', gap:12 }}>
+    <div style={{ padding:'16px', height:'100%', display:'flex', flexDirection:'column', gap:12, justifyContent:'center' }}>
       <Label>Top Friends</Label>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, flex:1 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
         {FRIENDS.map((f,i) => (
           <div key={i} onMouseEnter={()=>setHov(i)} onMouseLeave={()=>setHov(null)}
             style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, cursor:'pointer' }}>
