@@ -222,9 +222,10 @@ export default function MusicWidget({ editMode }) {
                   background: idx===i ? 'rgba(255,255,255,0.07)' : hov===i ? 'rgba(255,255,255,0.03)' : 'transparent',
                   border:`1px solid ${idx===i ? 'rgba(255,255,255,0.1)' : 'transparent'}`,
                 }}>
-                <span style={{ width:16, fontSize:'0.58rem', color: idx===i && playing ? 'var(--accent)' : 'var(--muted)',
-                  fontWeight:700, flexShrink:0, textAlign:'center' }}>
-                  {idx===i && playing ? '♫' : i+1}
+                <span style={{ width:16, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  {idx===i ? <SoundWave active={playing} /> : (
+                    <span style={{ fontSize:'0.58rem', color:'var(--muted)', fontWeight:700 }}>{i+1}</span>
+                  )}
                 </span>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:'0.75rem', fontWeight: idx===i ? 600 : 400,
@@ -293,6 +294,40 @@ export default function MusicWidget({ editMode }) {
 
       </div>
     </div>
+  )
+}
+
+// ── Sound wave (Dynamic Island style) ──────────────────
+const waveCSS = `
+  @keyframes bar1 { 0%,100%{height:3px} 25%{height:12px} 50%{height:5px}  75%{height:9px}  }
+  @keyframes bar2 { 0%,100%{height:8px} 25%{height:3px}  50%{height:13px} 75%{height:4px}  }
+  @keyframes bar3 { 0%,100%{height:5px} 25%{height:11px} 50%{height:3px}  75%{height:13px} }
+  @keyframes bar4 { 0%,100%{height:11px} 25%{height:4px} 50%{height:9px}  75%{height:3px}  }
+`
+
+function SoundWave({ active }) {
+  const bars = [
+    { anim:'bar1', delay:'0s'     },
+    { anim:'bar2', delay:'0.15s'  },
+    { anim:'bar3', delay:'0.08s'  },
+    { anim:'bar4', delay:'0.22s'  },
+  ]
+  return (
+    <>
+      <style>{waveCSS}</style>
+      <div style={{ display:'flex', alignItems:'center', gap:1.5, height:14 }}>
+        {bars.map((b, i) => (
+          <div key={i} style={{
+            width: 2.5,
+            height: active ? undefined : 4,
+            borderRadius: 2,
+            background: active ? 'var(--accent)' : 'var(--muted)',
+            animation: active ? `${b.anim} 0.9s ease-in-out infinite ${b.delay}` : 'none',
+            transition: 'background 0.3s',
+          }} />
+        ))}
+      </div>
+    </>
   )
 }
 
