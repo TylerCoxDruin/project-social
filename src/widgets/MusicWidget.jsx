@@ -21,7 +21,6 @@ async function fetchMeta(id) {
   const r = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`)
   if (!r.ok) throw new Error('not found')
   const d = await r.json()
-  // Try to split "Artist - Title" or "Title - Artist"
   let title = d.title, artist = d.author_name
   const dash = title.match(/^(.+?)\s[–\-]\s(.+)$/)
   if (dash) { artist = dash[1].trim(); title = dash[2].trim() }
@@ -33,34 +32,35 @@ export default function MusicWidget({ editMode }) {
     try { return JSON.parse(localStorage.getItem('sp-tracks')) || DEFAULT_TRACKS }
     catch { return DEFAULT_TRACKS }
   })
-  const [idx, setIdx]       = useState(0)
-  const [playing, setPlaying] = useState(false)
-  const [flipped, setFlipped] = useState(false)
-  const [url, setUrl]         = useState('')
+  const [idx, setIdx]           = useState(0)
+  const [playing, setPlaying]   = useState(false)
+  const [flipped, setFlipped]   = useState(false)
+  const [url, setUrl]           = useState('')
   const [fetching, setFetching] = useState(false)
   const [err, setErr]           = useState('')
   const [hov, setHov]           = useState(null)
+  const [synced, setSynced]     = useState(false)
 
-  const playerElRef   = useRef(null)
-  const playerRef     = useRef(null)
-  const readyRef      = useRef(false)
-  const idxRef        = useRef(idx)
-  const tracksRef     = useRef(tracks)
-  const playingRef    = useRef(playing)
+  const playerElRef  = useRef(null)
+  const playerRef    = useRef(null)
+  const readyRef     = useRef(false)
+  const idxRef       = useRef(idx)
+  const tracksRef    = useRef(tracks)
+  const playingRef   = useRef(playing)
+  const analyserRef  = useRef(null)
+  const audioCtxRef  = useRef(null)
 
-  useEffect(() => { idxRef.current = idx },       [idx])
-  useEffect(() => { tracksRef.current = tracks }, [tracks])
+  useEffect(() => { idxRef.current = idx },         [idx])
+  useEffect(() => { tracksRef.current = tracks },   [tracks])
   useEffect(() => { playingRef.current = playing }, [playing])
 
-  // Persist tracks
   useEffect(() => {
     try { localStorage.setItem('sp-tracks', JSON.stringify(tracks)) } catch {}
   }, [tracks])
 
-  // Close edit face when global edit mode turns off
   useEffect(() => { if (!editMode) setFlipped(false) }, [editMode])
 
-  // Boot YouTube IFrame API once
+  // Boot YouTube IFrame API
   useEffect(() => {
     const boot = () => {
       if (!playerElRef.current || playerRef.current) return
@@ -72,8 +72,8 @@ export default function MusicWidget({ editMode }) {
           onReady: () => { readyRef.current = true },
           onStateChange: (e) => {
             const YT = window.YT.PlayerState
-            if (e.data === YT.PLAYING)  { setPlaying(true)  }
-            if (e.data === YT.PAUSED)   { setPlaying(false) }
+            if (e.data === YT.PLAYING) { setPlaying(true)  }
+            if (e.data === YT.PAUSED)  { setPlaying(false) }
             if (e.data === YT.ENDED) {
               const next = (idxRef.current + 1) % tracksRef.current.length
               setIdx(next)
@@ -98,7 +98,40 @@ export default function MusicWidget({ editMode }) {
     }
   }, [])
 
-  // Controls
+  // ── Audio capture via getDisplayMedia ─────────────────
+  const connectAudio = async () => {
+    try {
+      // Chrome requires video:true — request minimum viable video then drop it
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: 1, height: 1, frameRate: 1 },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        preferCurrentTab: true,
+      })
+      stream.getVideoTracks().forEach(t => t.stop())
+
+      if (audioCtxRef.current) audioCtxRef.current.close()
+      const ctx      = new AudioContext()
+      const source   = ctx.createMediaStreamSource(stream)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize              = 256
+      analyser.smoothingTimeConstant = 0.8
+      source.connect(analyser)
+
+      audioCtxRef.current  = ctx
+      analyserRef.current  = analyser
+      setSynced(true)
+
+      // Detect when user stops sharing
+      stream.getAudioTracks()[0].addEventListener('ended', () => {
+        setSynced(false)
+        analyserRef.current = null
+      })
+    } catch {
+      // User cancelled or browser doesn't support — silent fail, keep simulation
+    }
+  }
+
+  // ── Transport controls ─────────────────────────────────
   const togglePlay = () => {
     if (!readyRef.current) return
     if (playing) { playerRef.current.pauseVideo() }
@@ -125,7 +158,7 @@ export default function MusicWidget({ editMode }) {
     }
   }
 
-  // Playlist editing
+  // ── Playlist editing ───────────────────────────────────
   const addTrack = async (e) => {
     e.preventDefault()
     setErr('')
@@ -159,7 +192,7 @@ export default function MusicWidget({ editMode }) {
   return (
     <div style={{ height:'100%', position:'relative', perspective:'1200px' }}>
 
-      {/* Hidden audio player */}
+      {/* Hidden YT player */}
       <div style={{ position:'absolute', width:1, height:1, opacity:0, overflow:'hidden', pointerEvents:'none' }}>
         <div ref={playerElRef} />
       </div>
@@ -177,12 +210,37 @@ export default function MusicWidget({ editMode }) {
         <div style={{ ...face }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
             <Label>Playlist</Label>
-            {editMode && (
-              <button onClick={() => setFlipped(true)} style={iconBtn} title="Edit playlist">✎</button>
-            )}
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              {/* Beat sync button */}
+              <button
+                onClick={connectAudio}
+                title={synced ? 'Synced to tab audio' : 'Sync wave to beat'}
+                style={{
+                  ...iconBtn,
+                  color:       synced ? '#4ade80' : 'var(--muted)',
+                  borderColor: synced ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.1)',
+                  background:  synced ? 'rgba(74,222,128,0.08)' : 'rgba(255,255,255,0.05)',
+                  fontSize: '0.65rem',
+                  padding: '3px 8px',
+                  display: 'flex', alignItems: 'center', gap: 4,
+                }}
+              >
+                <span style={{
+                  width: 5, height: 5, borderRadius: '50%',
+                  background: synced ? '#4ade80' : 'var(--muted)',
+                  boxShadow: synced ? '0 0 6px #4ade80' : 'none',
+                  animation: synced ? 'pulse 2s infinite' : 'none',
+                  flexShrink: 0,
+                }}/>
+                {synced ? 'Live' : 'Sync'}
+              </button>
+              {editMode && (
+                <button onClick={() => setFlipped(true)} style={iconBtn} title="Edit playlist">✎</button>
+              )}
+            </div>
           </div>
 
-          {/* Now playing info */}
+          {/* Now playing */}
           <div style={{ flexShrink:0, textAlign:'center', padding:'6px 0 2px' }}>
             <div style={{ fontSize:'0.92rem', fontWeight:600, color:'#fff',
               overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -193,7 +251,7 @@ export default function MusicWidget({ editMode }) {
             </div>
           </div>
 
-          {/* Transport controls */}
+          {/* Transport */}
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:18, flexShrink:0 }}>
             <button onClick={() => skipTo((idx - 1 + tracks.length) % tracks.length)} style={ctrlBtn}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
@@ -202,8 +260,7 @@ export default function MusicWidget({ editMode }) {
               background:'rgba(255,255,255,0.1)', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.15)' }}>
               {playing
                 ? <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6zm8-14v14h4V5z"/></svg>
-                : <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-              }
+                : <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>}
             </button>
             <button onClick={() => skipTo((idx + 1) % tracks.length)} style={ctrlBtn}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg>
@@ -223,9 +280,10 @@ export default function MusicWidget({ editMode }) {
                   border:`1px solid ${idx===i ? 'rgba(255,255,255,0.1)' : 'transparent'}`,
                 }}>
                 <span style={{ width:16, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  {idx===i ? <SoundWave active={playing} /> : (
-                    <span style={{ fontSize:'0.58rem', color:'var(--muted)', fontWeight:700 }}>{i+1}</span>
-                  )}
+                  {idx===i
+                    ? <SoundWave active={playing} analyser={analyserRef} />
+                    : <span style={{ fontSize:'0.58rem', color:'var(--muted)', fontWeight:700 }}>{i+1}</span>
+                  }
                 </span>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:'0.75rem', fontWeight: idx===i ? 600 : 400,
@@ -259,8 +317,7 @@ export default function MusicWidget({ editMode }) {
               onFocus={e => e.target.style.borderColor='rgba(255,255,255,0.25)'}
               onBlur={e  => e.target.style.borderColor='rgba(255,255,255,0.1)'}
             />
-            <button type="submit" disabled={fetching} style={{ ...iconBtn, padding:'0 12px',
-              opacity: fetching ? 0.5 : 1 }}>
+            <button type="submit" disabled={fetching} style={{ ...iconBtn, padding:'0 12px', opacity: fetching ? 0.5 : 1 }}>
               {fetching ? '…' : '+'}
             </button>
           </form>
@@ -293,91 +350,90 @@ export default function MusicWidget({ editMode }) {
         </div>
 
       </div>
+      <style>{`@keyframes pulse { 50%{opacity:.4} }`}</style>
     </div>
   )
 }
 
-// ── Sound wave — physics-driven, beat-simulated ────────
-const NUM_BARS = 4
-const REST_H   = 2.5   // resting height px
-const MAX_H    = 13    // max height px
+// ── SoundWave — real analyser data or physics simulation ──
+const REST_H = 2.5
+const MAX_H  = 13
 
-// Each bar has its own "frequency band" personality
-const BAR_PROFILES = [
-  { beatSens: 1.0, freqBias: 0.9 },  // sub-bass  — hits hardest on beat
-  { beatSens: 0.7, freqBias: 1.2 },  // low-mid
-  { beatSens: 0.5, freqBias: 1.5 },  // mid
-  { beatSens: 0.8, freqBias: 0.7 },  // high — slightly behind the beat
+// Frequency band slices (indices into a 128-bin FFT array)
+const BANDS = [
+  [0,   6],   // sub-bass
+  [6,   20],  // bass
+  [20,  50],  // mid
+  [50,  90],  // high-mid
 ]
 
-function useBeatWave(active) {
-  const [heights, setHeights] = useState(() => Array(NUM_BARS).fill(REST_H))
-  const stateRef = useRef(Array(NUM_BARS).fill(0).map(() => ({
-    value: REST_H, velocity: 0, target: REST_H,
-  })))
+// Physics simulation profiles (fallback when not synced)
+const PROFILES = [
+  { beatSens:1.0, freqBias:0.9 },
+  { beatSens:0.7, freqBias:1.2 },
+  { beatSens:0.5, freqBias:1.5 },
+  { beatSens:0.8, freqBias:0.7 },
+]
+
+function SoundWave({ active, analyser }) {
+  const [heights, setHeights] = useState(() => Array(4).fill(REST_H))
   const rafRef      = useRef(null)
-  const lastBeatRef = useRef(0)
-  const bpmRef      = useRef(0)
+  const simRef      = useRef(Array(4).fill(0).map(() => ({ value: REST_H, velocity: 0, target: REST_H })))
+  const bpmRef      = useRef(100 + Math.random() * 40)
   const nextBeatRef = useRef(0)
 
   useEffect(() => {
+    cancelAnimationFrame(rafRef.current)
+
     if (!active) {
-      cancelAnimationFrame(rafRef.current)
-      stateRef.current = stateRef.current.map(b => ({ ...b, target: REST_H, velocity: 0 }))
-      setHeights(Array(NUM_BARS).fill(REST_H))
+      setHeights(Array(4).fill(REST_H))
       return
     }
 
-    // Pick a random starting BPM in a realistic range (80–145)
-    bpmRef.current    = 80 + Math.random() * 65
-    nextBeatRef.current = performance.now()
+    const fftData = new Uint8Array(128)
 
     const tick = (now) => {
-      // Fire a beat impulse when it's time
-      if (now >= nextBeatRef.current) {
-        // Occasionally double-time or half-time feel
-        const subdivision = Math.random() < 0.15 ? 0.5 : Math.random() < 0.1 ? 2 : 1
-        const interval    = (60_000 / bpmRef.current) * subdivision
-        nextBeatRef.current = now + interval * (0.92 + Math.random() * 0.16)
+      const hasAnalyser = analyser?.current
 
-        // Drift BPM slightly over time — feels alive
-        bpmRef.current = Math.max(75, Math.min(150,
-          bpmRef.current + (Math.random() - 0.5) * 4
-        ))
-
-        stateRef.current = stateRef.current.map((bar, i) => {
-          const p      = BAR_PROFILES[i]
-          const impact = p.beatSens * (0.6 + Math.random() * 0.4)
-          const target = REST_H + (MAX_H - REST_H) * impact * p.freqBias
-          return { ...bar, target: Math.min(MAX_H, target), velocity: impact * 3 }
+      if (hasAnalyser) {
+        // ── Real audio path ──────────────────────────────
+        analyser.current.getByteFrequencyData(fftData)
+        const newH = BANDS.map(([lo, hi]) => {
+          let sum = 0
+          for (let i = lo; i < hi; i++) sum += fftData[i]
+          const avg = sum / (hi - lo)
+          return REST_H + (avg / 255) * (MAX_H - REST_H)
         })
+        setHeights(newH)
+      } else {
+        // ── Physics simulation fallback ──────────────────
+        if (now >= nextBeatRef.current) {
+          const sub   = Math.random() < 0.12 ? 0.5 : Math.random() < 0.08 ? 2 : 1
+          const ms    = (60_000 / bpmRef.current) * sub
+          nextBeatRef.current = now + ms * (0.93 + Math.random() * 0.14)
+          bpmRef.current = Math.max(75, Math.min(150, bpmRef.current + (Math.random() - 0.5) * 4))
+
+          simRef.current = simRef.current.map((b, i) => {
+            const impact = PROFILES[i].beatSens * (0.55 + Math.random() * 0.45)
+            return { ...b, target: Math.min(MAX_H, REST_H + (MAX_H - REST_H) * impact * PROFILES[i].freqBias), velocity: impact * 3 }
+          })
+        }
+        simRef.current = simRef.current.map(b => {
+          const force    = (b.target - b.value) * 0.18
+          const velocity = (b.velocity + force) * 0.62
+          const value    = Math.max(REST_H, Math.min(MAX_H, b.value + velocity))
+          return { value, velocity, target: b.target * 0.88 + REST_H * 0.12 }
+        })
+        setHeights(simRef.current.map(b => b.value))
       }
 
-      // Spring physics — each bar springs toward its target then decays back
-      stateRef.current = stateRef.current.map(bar => {
-        const spring   = 0.18
-        const damping  = 0.62
-        const force    = (bar.target - bar.value) * spring
-        const velocity = (bar.velocity + force) * damping
-        const value    = bar.value + velocity
-        // Target drifts back to rest
-        const target   = bar.target * 0.88 + REST_H * 0.12
-        return { value: Math.max(REST_H, Math.min(MAX_H, value)), velocity, target }
-      })
-
-      setHeights(stateRef.current.map(b => b.value))
       rafRef.current = requestAnimationFrame(tick)
     }
 
     rafRef.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [active])
+  }, [active, analyser?.current])
 
-  return heights
-}
-
-function SoundWave({ active }) {
-  const heights = useBeatWave(active)
   return (
     <div style={{ display:'flex', alignItems:'center', gap:1.5, height:14 }}>
       {heights.map((h, i) => (
@@ -385,8 +441,7 @@ function SoundWave({ active }) {
           width: 2.5,
           height: h,
           borderRadius: 2,
-          background: active ? 'var(--accent)' : 'rgba(161,161,170,0.5)',
-          transition: active ? 'background 0.3s' : 'height 0.25s ease, background 0.3s',
+          background: active ? 'var(--accent)' : 'rgba(161,161,170,0.4)',
           willChange: 'height',
         }} />
       ))}
