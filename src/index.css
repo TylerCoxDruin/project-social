@@ -1,0 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg: #09090b;
+  --card: rgba(24, 24, 27, 0.85);
+  --border: rgba(255, 255, 255, 0.11);
+  --text: #fafafa;
+  --muted: #a1a1aa;
+  --accent: #3b82f6;
+  --radius: 20px;
+  --font: 'Inter', system-ui, sans-serif;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overflow-x: hidden; }
+
+body {
+  background: var(--bg);
+  background-image:
+    radial-gradient(circle at 50% 0%, #1e293b 0%, transparent 55%),
+    radial-gradient(circle at 85% 10%, rgba(59,130,246,0.06) 0%, transparent 40%);
+  color: var(--text);
+  font-family: var(--font);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: -44px;
+  background-image:
+    linear-gradient(rgba(59,130,246,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59,130,246,0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  animation: drift 60s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+  mask-image: radial-gradient(ellipse at 50% 40%, black 25%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 40%, black 25%, transparent 75%);
+}
+
+@keyframes drift { to { transform: translate(44px, 44px); } }
+@keyframes pulse { 50% { opacity: 0.4; } }
+
+#root { position: relative; z-index: 1; }
+
+/* Grid placeholder during drag */
+.react-grid-item.react-grid-placeholder {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1.5px dashed rgba(255,255,255,0.15) !important;
+  border-radius: var(--radius) !important;
+  opacity: 1 !important;
+}
+
+/* Resize handle */
+.react-grid-item > .react-resizable-handle { display: none; }
+.edit-active .react-grid-item > .react-resizable-handle {
+  display: block;
+  opacity: 0.5;
+}
+.react-resizable-handle { background-image: none !important; }
+.react-resizable-handle::after {
+  content: '';
+  position: absolute;
+  right: 6px; bottom: 6px;
+  width: 8px; height: 8px;
+  border-right: 2px solid rgba(255,255,255,0.35);
+  border-bottom: 2px solid rgba(255,255,255,0.35);
+}
+
+/* Lifted shadow while dragging */
+.react-grid-item.react-draggable-dragging .card {
+  box-shadow: 0 28px 60px rgba(0,0,0,0.55) !important;
+  transform: scale(1.01);
+}
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
