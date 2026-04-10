@@ -297,37 +297,100 @@ export default function MusicWidget({ editMode }) {
   )
 }
 
-// ── Sound wave (Dynamic Island style) ──────────────────
-const waveCSS = `
-  @keyframes bar1 { 0%,100%{height:3px} 25%{height:12px} 50%{height:5px}  75%{height:9px}  }
-  @keyframes bar2 { 0%,100%{height:8px} 25%{height:3px}  50%{height:13px} 75%{height:4px}  }
-  @keyframes bar3 { 0%,100%{height:5px} 25%{height:11px} 50%{height:3px}  75%{height:13px} }
-  @keyframes bar4 { 0%,100%{height:11px} 25%{height:4px} 50%{height:9px}  75%{height:3px}  }
-`
+// ── Sound wave — physics-driven, beat-simulated ────────
+const NUM_BARS = 4
+const REST_H   = 2.5   // resting height px
+const MAX_H    = 13    // max height px
+
+// Each bar has its own "frequency band" personality
+const BAR_PROFILES = [
+  { beatSens: 1.0, freqBias: 0.9 },  // sub-bass  — hits hardest on beat
+  { beatSens: 0.7, freqBias: 1.2 },  // low-mid
+  { beatSens: 0.5, freqBias: 1.5 },  // mid
+  { beatSens: 0.8, freqBias: 0.7 },  // high — slightly behind the beat
+]
+
+function useBeatWave(active) {
+  const [heights, setHeights] = useState(() => Array(NUM_BARS).fill(REST_H))
+  const stateRef = useRef(Array(NUM_BARS).fill(0).map(() => ({
+    value: REST_H, velocity: 0, target: REST_H,
+  })))
+  const rafRef      = useRef(null)
+  const lastBeatRef = useRef(0)
+  const bpmRef      = useRef(0)
+  const nextBeatRef = useRef(0)
+
+  useEffect(() => {
+    if (!active) {
+      cancelAnimationFrame(rafRef.current)
+      stateRef.current = stateRef.current.map(b => ({ ...b, target: REST_H, velocity: 0 }))
+      setHeights(Array(NUM_BARS).fill(REST_H))
+      return
+    }
+
+    // Pick a random starting BPM in a realistic range (80–145)
+    bpmRef.current    = 80 + Math.random() * 65
+    nextBeatRef.current = performance.now()
+
+    const tick = (now) => {
+      // Fire a beat impulse when it's time
+      if (now >= nextBeatRef.current) {
+        // Occasionally double-time or half-time feel
+        const subdivision = Math.random() < 0.15 ? 0.5 : Math.random() < 0.1 ? 2 : 1
+        const interval    = (60_000 / bpmRef.current) * subdivision
+        nextBeatRef.current = now + interval * (0.92 + Math.random() * 0.16)
+
+        // Drift BPM slightly over time — feels alive
+        bpmRef.current = Math.max(75, Math.min(150,
+          bpmRef.current + (Math.random() - 0.5) * 4
+        ))
+
+        stateRef.current = stateRef.current.map((bar, i) => {
+          const p      = BAR_PROFILES[i]
+          const impact = p.beatSens * (0.6 + Math.random() * 0.4)
+          const target = REST_H + (MAX_H - REST_H) * impact * p.freqBias
+          return { ...bar, target: Math.min(MAX_H, target), velocity: impact * 3 }
+        })
+      }
+
+      // Spring physics — each bar springs toward its target then decays back
+      stateRef.current = stateRef.current.map(bar => {
+        const spring   = 0.18
+        const damping  = 0.62
+        const force    = (bar.target - bar.value) * spring
+        const velocity = (bar.velocity + force) * damping
+        const value    = bar.value + velocity
+        // Target drifts back to rest
+        const target   = bar.target * 0.88 + REST_H * 0.12
+        return { value: Math.max(REST_H, Math.min(MAX_H, value)), velocity, target }
+      })
+
+      setHeights(stateRef.current.map(b => b.value))
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    rafRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [active])
+
+  return heights
+}
 
 function SoundWave({ active }) {
-  const bars = [
-    { anim:'bar1', delay:'0s'     },
-    { anim:'bar2', delay:'0.15s'  },
-    { anim:'bar3', delay:'0.08s'  },
-    { anim:'bar4', delay:'0.22s'  },
-  ]
+  const heights = useBeatWave(active)
   return (
-    <>
-      <style>{waveCSS}</style>
-      <div style={{ display:'flex', alignItems:'center', gap:1.5, height:14 }}>
-        {bars.map((b, i) => (
-          <div key={i} style={{
-            width: 2.5,
-            height: active ? undefined : 4,
-            borderRadius: 2,
-            background: active ? 'var(--accent)' : 'var(--muted)',
-            animation: active ? `${b.anim} 0.9s ease-in-out infinite ${b.delay}` : 'none',
-            transition: 'background 0.3s',
-          }} />
-        ))}
-      </div>
-    </>
+    <div style={{ display:'flex', alignItems:'center', gap:1.5, height:14 }}>
+      {heights.map((h, i) => (
+        <div key={i} style={{
+          width: 2.5,
+          height: h,
+          borderRadius: 2,
+          background: active ? 'var(--accent)' : 'rgba(161,161,170,0.5)',
+          transition: active ? 'background 0.3s' : 'height 0.25s ease, background 0.3s',
+          willChange: 'height',
+        }} />
+      ))}
+    </div>
   )
 }
 
