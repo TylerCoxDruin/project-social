@@ -281,7 +281,7 @@ export default function MusicWidget({ editMode }) {
                 }}>
                 <span style={{ width:16, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
                   {idx===i
-                    ? <SoundWave active={playing} analyser={analyserRef} />
+                    ? <SoundWave active={playing} analyser={analyserRef} synced={synced} />
                     : <span style={{ fontSize:'0.58rem', color:'var(--muted)', fontWeight:700 }}>{i+1}</span>
                   }
                 </span>
@@ -375,7 +375,7 @@ const PROFILES = [
   { beatSens:0.8, freqBias:0.7 },
 ]
 
-function SoundWave({ active, analyser }) {
+function SoundWave({ active, analyser, synced }) {
   const [heights, setHeights] = useState(() => Array(4).fill(REST_H))
   const rafRef      = useRef(null)
   const simRef      = useRef(Array(4).fill(0).map(() => ({ value: REST_H, velocity: 0, target: REST_H })))
@@ -432,7 +432,7 @@ function SoundWave({ active, analyser }) {
 
     rafRef.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [active, analyser?.current])
+  }, [active, synced])
 
   return (
     <div style={{ display:'flex', alignItems:'center', gap:1.5, height:14 }}>
