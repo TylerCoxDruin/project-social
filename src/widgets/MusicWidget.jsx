@@ -39,7 +39,6 @@ export default function MusicWidget({ editMode }) {
   const [fetching, setFetching] = useState(false)
   const [err, setErr]           = useState('')
   const [hov, setHov]           = useState(null)
-  const [synced, setSynced]     = useState(false)
 
   const playerElRef  = useRef(null)
   const playerRef    = useRef(null)
@@ -47,8 +46,6 @@ export default function MusicWidget({ editMode }) {
   const idxRef       = useRef(idx)
   const tracksRef    = useRef(tracks)
   const playingRef   = useRef(playing)
-  const analyserRef  = useRef(null)
-  const audioCtxRef  = useRef(null)
 
   useEffect(() => { idxRef.current = idx },         [idx])
   useEffect(() => { tracksRef.current = tracks },   [tracks])
@@ -97,39 +94,6 @@ export default function MusicWidget({ editMode }) {
       }
     }
   }, [])
-
-  // ── Audio capture via getDisplayMedia ─────────────────
-  const connectAudio = async () => {
-    try {
-      // Chrome requires video:true — request minimum viable video then drop it
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width: 1, height: 1, frameRate: 1 },
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-        preferCurrentTab: true,
-      })
-      stream.getVideoTracks().forEach(t => t.stop())
-
-      if (audioCtxRef.current) audioCtxRef.current.close()
-      const ctx      = new AudioContext()
-      const source   = ctx.createMediaStreamSource(stream)
-      const analyser = ctx.createAnalyser()
-      analyser.fftSize              = 256
-      analyser.smoothingTimeConstant = 0.8
-      source.connect(analyser)
-
-      audioCtxRef.current  = ctx
-      analyserRef.current  = analyser
-      setSynced(true)
-
-      // Detect when user stops sharing
-      stream.getAudioTracks()[0].addEventListener('ended', () => {
-        setSynced(false)
-        analyserRef.current = null
-      })
-    } catch {
-      // User cancelled or browser doesn't support — silent fail, keep simulation
-    }
-  }
 
   // ── Transport controls ─────────────────────────────────
   const togglePlay = () => {
@@ -211,29 +175,6 @@ export default function MusicWidget({ editMode }) {
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
             <Label>Playlist</Label>
             <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-              {/* Beat sync button */}
-              <button
-                onClick={connectAudio}
-                title={synced ? 'Synced to tab audio' : 'Sync wave to beat'}
-                style={{
-                  ...iconBtn,
-                  color:       synced ? '#4ade80' : 'var(--muted)',
-                  borderColor: synced ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.1)',
-                  background:  synced ? 'rgba(74,222,128,0.08)' : 'rgba(255,255,255,0.05)',
-                  fontSize: '0.65rem',
-                  padding: '3px 8px',
-                  display: 'flex', alignItems: 'center', gap: 4,
-                }}
-              >
-                <span style={{
-                  width: 5, height: 5, borderRadius: '50%',
-                  background: synced ? '#4ade80' : 'var(--muted)',
-                  boxShadow: synced ? '0 0 6px #4ade80' : 'none',
-                  animation: synced ? 'pulse 2s infinite' : 'none',
-                  flexShrink: 0,
-                }}/>
-                {synced ? 'Live' : 'Sync'}
-              </button>
               {editMode && (
                 <button onClick={() => setFlipped(true)} style={iconBtn} title="Edit playlist">✎</button>
               )}
@@ -279,11 +220,9 @@ export default function MusicWidget({ editMode }) {
                   background: idx===i ? 'rgba(255,255,255,0.07)' : hov===i ? 'rgba(255,255,255,0.03)' : 'transparent',
                   border:`1px solid ${idx===i ? 'rgba(255,255,255,0.1)' : 'transparent'}`,
                 }}>
-                <span style={{ width:16, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  {idx===i
-                    ? <SoundWave active={playing} analyser={analyserRef} synced={synced} />
-                    : <span style={{ fontSize:'0.58rem', color:'var(--muted)', fontWeight:700 }}>{i+1}</span>
-                  }
+                <span style={{ width:16, fontSize:'0.65rem', flexShrink:0, textAlign:'center',
+                  color: idx===i && playing ? 'var(--accent)' : 'var(--muted)', fontWeight:700 }}>
+                  {idx===i && playing ? '♫' : i+1}
                 </span>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:'0.75rem', fontWeight: idx===i ? 600 : 400,
@@ -351,100 +290,6 @@ export default function MusicWidget({ editMode }) {
 
       </div>
       <style>{`@keyframes pulse { 50%{opacity:.4} }`}</style>
-    </div>
-  )
-}
-
-// ── SoundWave — real analyser data or physics simulation ──
-const REST_H = 2.5
-const MAX_H  = 13
-
-// Frequency band slices (indices into a 128-bin FFT array)
-const BANDS = [
-  [0,   6],   // sub-bass
-  [6,   20],  // bass
-  [20,  50],  // mid
-  [50,  90],  // high-mid
-]
-
-// Physics simulation profiles (fallback when not synced)
-const PROFILES = [
-  { beatSens:1.0, freqBias:0.9 },
-  { beatSens:0.7, freqBias:1.2 },
-  { beatSens:0.5, freqBias:1.5 },
-  { beatSens:0.8, freqBias:0.7 },
-]
-
-function SoundWave({ active, analyser, synced }) {
-  const [heights, setHeights] = useState(() => Array(4).fill(REST_H))
-  const rafRef      = useRef(null)
-  const simRef      = useRef(Array(4).fill(0).map(() => ({ value: REST_H, velocity: 0, target: REST_H })))
-  const bpmRef      = useRef(100 + Math.random() * 40)
-  const nextBeatRef = useRef(0)
-
-  useEffect(() => {
-    cancelAnimationFrame(rafRef.current)
-
-    if (!active) {
-      setHeights(Array(4).fill(REST_H))
-      return
-    }
-
-    const fftData = new Uint8Array(128)
-
-    const tick = (now) => {
-      const hasAnalyser = analyser?.current
-
-      if (hasAnalyser) {
-        // ── Real audio path ──────────────────────────────
-        analyser.current.getByteFrequencyData(fftData)
-        const newH = BANDS.map(([lo, hi]) => {
-          let sum = 0
-          for (let i = lo; i < hi; i++) sum += fftData[i]
-          const avg = sum / (hi - lo)
-          return REST_H + (avg / 255) * (MAX_H - REST_H)
-        })
-        setHeights(newH)
-      } else {
-        // ── Physics simulation fallback ──────────────────
-        if (now >= nextBeatRef.current) {
-          const sub   = Math.random() < 0.12 ? 0.5 : Math.random() < 0.08 ? 2 : 1
-          const ms    = (60_000 / bpmRef.current) * sub
-          nextBeatRef.current = now + ms * (0.93 + Math.random() * 0.14)
-          bpmRef.current = Math.max(75, Math.min(150, bpmRef.current + (Math.random() - 0.5) * 4))
-
-          simRef.current = simRef.current.map((b, i) => {
-            const impact = PROFILES[i].beatSens * (0.55 + Math.random() * 0.45)
-            return { ...b, target: Math.min(MAX_H, REST_H + (MAX_H - REST_H) * impact * PROFILES[i].freqBias), velocity: impact * 3 }
-          })
-        }
-        simRef.current = simRef.current.map(b => {
-          const force    = (b.target - b.value) * 0.18
-          const velocity = (b.velocity + force) * 0.62
-          const value    = Math.max(REST_H, Math.min(MAX_H, b.value + velocity))
-          return { value, velocity, target: b.target * 0.88 + REST_H * 0.12 }
-        })
-        setHeights(simRef.current.map(b => b.value))
-      }
-
-      rafRef.current = requestAnimationFrame(tick)
-    }
-
-    rafRef.current = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [active, synced])
-
-  return (
-    <div style={{ display:'flex', alignItems:'center', gap:1.5, height:14 }}>
-      {heights.map((h, i) => (
-        <div key={i} style={{
-          width: 2.5,
-          height: h,
-          borderRadius: 2,
-          background: active ? 'var(--accent)' : 'rgba(161,161,170,0.4)',
-          willChange: 'height',
-        }} />
-      ))}
     </div>
   )
 }
