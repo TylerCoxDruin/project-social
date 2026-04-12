@@ -4,12 +4,13 @@ import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 import './index.css'
 
-import AvatarWidget   from './widgets/AvatarWidget'
-import BioWidget      from './widgets/BioWidget'
-import FriendsWidget  from './widgets/FriendsWidget'
-import YouTubeWidget  from './widgets/YouTubeWidget'
-import GalleryWidget  from './widgets/GalleryWidget'
-import MusicWidget    from './widgets/MusicWidget'
+import AvatarWidget    from './widgets/AvatarWidget'
+import BioWidget       from './widgets/BioWidget'
+import FriendsWidget   from './widgets/FriendsWidget'
+import YouTubeWidget   from './widgets/YouTubeWidget'
+import GalleryWidget   from './widgets/GalleryWidget'
+import MusicWidget     from './widgets/MusicWidget'
+import CommentsWidget  from './widgets/CommentsWidget'
 
 // Apple widget sizes on a 12-col grid with rowHeight=92 (≈ square per col unit)
 // Small      3×3  — 1:1 square
@@ -19,16 +20,17 @@ import MusicWidget    from './widgets/MusicWidget'
 
 const DEFAULT_LAYOUTS = {
   lg: [
-    { i: 'avatar',  x: 0,  y: 0, w: 3, h: 3 }, // Small
-    { i: 'bio',     x: 3,  y: 0, w: 6, h: 3 }, // Medium
-    { i: 'music',   x: 9,  y: 0, w: 3, h: 3 }, // Small
-    { i: 'friends', x: 0,  y: 3, w: 6, h: 3 }, // Medium
-    { i: 'gallery', x: 6,  y: 3, w: 6, h: 6 }, // Large
-    { i: 'youtube', x: 0,  y: 6, w: 6, h: 6 }, // Large
+    { i: 'avatar',   x: 0,  y: 0, w: 3, h: 3 }, // Small
+    { i: 'bio',      x: 3,  y: 0, w: 6, h: 3 }, // Medium
+    { i: 'music',    x: 9,  y: 0, w: 3, h: 3 }, // Small
+    { i: 'friends',  x: 0,  y: 3, w: 6, h: 3 }, // Medium
+    { i: 'gallery',  x: 6,  y: 3, w: 6, h: 6 }, // Large
+    { i: 'youtube',  x: 0,  y: 6, w: 6, h: 6 }, // Large
+    { i: 'comments', x: 6,  y: 9, w: 6, h: 6 }, // Large
   ],
 }
 
-const KEY = 'sp-layout-v4'
+const KEY = 'sp-layout-v5'
 const load = () => { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : DEFAULT_LAYOUTS } catch { return DEFAULT_LAYOUTS } }
 
 export default function App() {
@@ -92,6 +94,7 @@ export default function App() {
           <div key="youtube"><Card edit={edit} label="YouTube"><YouTubeWidget /></Card></div>
           <div key="gallery"><Card edit={edit} label="Gallery"><GalleryWidget /></Card></div>
           <div key="music"><Card edit={edit} label="Music"><MusicWidget editMode={edit} /></Card></div>
+          <div key="comments"><Card edit={edit} label="Comments"><CommentsWidget /></Card></div>
         </ResponsiveGridLayout>
       </div>
     </div>
